@@ -7,7 +7,6 @@ param ContainerApps_Environment_Name string = 'env-${Name}'
 param ContainerApps_HttpApi_CurrentRevisionName string = ''
 param ContainerApps_HttpApi_NewRevisionName string =  toLower(utcNow())
 
-var StorageAccount_ApiVersion = '2018-07-01'
 var StorageAccount_Queue_Name = 'demoqueue'
 
 resource StorageAccount 'Microsoft.Storage/storageAccounts@2021-01-01' = {
@@ -89,7 +88,7 @@ resource queuereader 'Microsoft.App/containerApps@2022-03-01' = {
       secrets: [
         {
           name: 'queueconnection'
-          value: 'DefaultEndpointsProtocol=https;AccountName=${StorageAccount_Name};AccountKey=${listKeys(StorageAccount.id, StorageAccount_ApiVersion).keys[0].value};EndpointSuffix=core.windows.net'
+          value: 'DefaultEndpointsProtocol=https;AccountName=${StorageAccount.name};AccountKey=${StorageAccount.listKeys().keys[0].value};EndpointSuffix=core.windows.net'
         }
       ]
       dapr: {
@@ -279,7 +278,7 @@ resource httpapi 'Microsoft.App/containerApps@2022-03-01' = {
       secrets: [
         {
           name: 'queueconnection'
-          value: 'DefaultEndpointsProtocol=https;AccountName=${StorageAccount_Name};AccountKey=${listKeys(StorageAccount.id, StorageAccount_ApiVersion).keys[0].value};EndpointSuffix=core.windows.net'
+          value: 'DefaultEndpointsProtocol=https;AccountName=${StorageAccount.name};AccountKey=${StorageAccount.listKeys().keys[0].value};EndpointSuffix=core.windows.net'
         }
       ]
       dapr: {
