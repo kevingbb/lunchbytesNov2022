@@ -8,8 +8,9 @@ param ContainerApps_HttpApi_CurrentRevisionName string = ''
 param ContainerApps_HttpApi_NewRevisionName string =  toLower(utcNow())
 
 var StorageAccount_Queue_Name = 'demoqueue'
+var StorageAccountConnectionString = 'DefaultEndpointsProtocol=https;AccountName=${StorageAccount.name};AccountKey=${StorageAccount.listKeys().keys[0].value};EndpointSuffix=core.windows.net'
 
-resource StorageAccount 'Microsoft.Storage/storageAccounts@2021-01-01' = {
+resource StorageAccount 'Microsoft.Storage/storageAccounts@2022-05-01' = {
   name: StorageAccount_Name
   location: Location
   sku: {
@@ -21,17 +22,13 @@ resource StorageAccount 'Microsoft.Storage/storageAccounts@2021-01-01' = {
     supportsHttpsTrafficOnly: true
     accessTier: 'Hot'
   }
-}
-
-resource StorageAccount_Name_default_StorageAccount_Queue 'Microsoft.Storage/storageAccounts/queueServices/queues@2021-01-01' = {
-  name: '${StorageAccount_Name}/default/${StorageAccount_Queue_Name}'
-  properties: {
-    metadata: {
+  
+  resource default 'queueServices' = {
+    name: 'default'
+    resource queue 'queues' = {
+      name: StorageAccount_Queue_Name
     }
   }
-  dependsOn: [
-    StorageAccount
-  ]
 }
 
 resource log 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
@@ -61,34 +58,35 @@ resource AppInsights 'Microsoft.Insights/components@2020-02-02' = {
   }
 }
 
-resource ContainerApps_Environment 'Microsoft.App/managedEnvironments@2022-03-01' = {
+resource AcaEnv 'Microsoft.App/managedEnvironments@2022-06-01-preview' = {
   name: ContainerApps_Environment_Name
   location: Location
-  tags: {
+  sku: {
+    name: 'Consumption'
   }
   properties: {
     appLogsConfiguration: {
       destination: 'log-analytics'
       logAnalyticsConfiguration: {
         customerId : log.properties.customerId
-        sharedKey: listKeys(log.id, '2015-03-20').primarySharedKey
+        sharedKey: log.listKeys().primarySharedKey
       }
     }
-    daprAIInstrumentationKey: reference(AppInsights.id, '2020-02-02', 'Full').properties.InstrumentationKey
+    daprAIInstrumentationKey: AppInsights.properties.InstrumentationKey
   }
 }
 
-resource queuereader 'Microsoft.App/containerApps@2022-03-01' = {
+resource queuereader 'Microsoft.App/containerApps@2022-06-01-preview' = {
   name: 'queuereader'
   location: Location
   properties: {
-    managedEnvironmentId: ContainerApps_Environment.id
+    managedEnvironmentId: AcaEnv.id
     configuration: {
       activeRevisionsMode: 'single'
       secrets: [
         {
           name: 'queueconnection'
-          value: 'DefaultEndpointsProtocol=https;AccountName=${StorageAccount.name};AccountKey=${StorageAccount.listKeys().keys[0].value};EndpointSuffix=core.windows.net'
+          value: StorageAccountConnectionString
         }
       ]
       dapr: {
@@ -143,11 +141,11 @@ resource queuereader 'Microsoft.App/containerApps@2022-03-01' = {
   }
 }
 
-resource dashboardapp 'Microsoft.App/containerApps@2022-03-01' = {
+resource dashboardapp 'Microsoft.App/containerApps@2022-06-01-preview' = {
   name: 'dashboardapp'
   location: Location
   properties: {
-    managedEnvironmentId: ContainerApps_Environment.id
+    managedEnvironmentId: AcaEnv.id
     configuration: {
       ingress: {
         external: true
@@ -182,11 +180,11 @@ resource dashboardapp 'Microsoft.App/containerApps@2022-03-01' = {
   }
 }
 
-resource dashboardapi 'Microsoft.App/containerApps@2022-03-01' = {
+resource dashboardapi 'Microsoft.App/containerApps@2022-06-01-preview' = {
   name: 'dashboardapi'
   location: Location
   properties: {
-    managedEnvironmentId: ContainerApps_Environment.id
+    managedEnvironmentId: AcaEnv.id
     configuration: {
       ingress: {
         external: true
@@ -225,11 +223,11 @@ resource dashboardapi 'Microsoft.App/containerApps@2022-03-01' = {
   }
 }
 
-resource storeapp 'Microsoft.App/containerApps@2022-03-01' = {
+resource storeapp 'Microsoft.App/containerApps@2022-06-01-preview' = {
   name: 'storeapp'
   location: Location
   properties: {
-    managedEnvironmentId: ContainerApps_Environment.id
+    managedEnvironmentId: AcaEnv.id
     configuration: {
       ingress: {
         external: true
@@ -258,11 +256,11 @@ resource storeapp 'Microsoft.App/containerApps@2022-03-01' = {
   }
 }
 
-resource httpapi 'Microsoft.App/containerApps@2022-03-01' = {
+resource httpapi 'Microsoft.App/containerApps@2022-06-01-preview' = {
   name: 'httpapi'
   location: Location
   properties: {
-    managedEnvironmentId: ContainerApps_Environment.id
+    managedEnvironmentId: AcaEnv.id
     configuration: {
       activeRevisionsMode: 'multiple'
       ingress: {
@@ -278,7 +276,7 @@ resource httpapi 'Microsoft.App/containerApps@2022-03-01' = {
       secrets: [
         {
           name: 'queueconnection'
-          value: 'DefaultEndpointsProtocol=https;AccountName=${StorageAccount.name};AccountKey=${StorageAccount.listKeys().keys[0].value};EndpointSuffix=core.windows.net'
+          value: StorageAccountConnectionString
         }
       ]
       dapr: {
@@ -325,7 +323,7 @@ resource httpapi 'Microsoft.App/containerApps@2022-03-01' = {
 }
 
 output Location string = Location
-output ContainerAppEnvName string = ContainerApps_Environment.name
+output ContainerAppEnvName string = AcaEnv.name
 output LogAnalyticsName string = log.name
 output AppInsightsName string = AppInsights.name
 output StorageAccountName string = StorageAccount.name
