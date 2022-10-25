@@ -324,3 +324,9 @@ resource httpapi 'Microsoft.App/containerApps@2022-03-01' = {
     }
   }
 }
+
+output Location string = Location
+output ContainerAppEnvName string = ContainerApps_Environment.name
+output LogAnalyticsName string = log.name
+output AppInsightsName string = AppInsights.name
+output StorageAccountName string = StorageAccount.name
