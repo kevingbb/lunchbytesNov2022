@@ -4,8 +4,8 @@ param StorageAccount_Name string = take(toLower('st${Name}'),24)
 param LogAnalytics_Workspace_Name string = 'log-${Name}'
 param AppInsights_Name string = 'ai-${Name}'
 param ContainerApps_Environment_Name string = 'env-${Name}'
-param ContainerApps_HttpApi_CurrentRevisionName string
-param ContainerApps_HttpApi_NewRevisionName string
+param ContainerApps_HttpApi_CurrentRevisionName string = ''
+param ContainerApps_HttpApi_NewRevisionName string =  toLower(utcNow())
 
 var StorageAccount_ApiVersion = '2018-07-01'
 var StorageAccount_Queue_Name = 'demoqueue'
