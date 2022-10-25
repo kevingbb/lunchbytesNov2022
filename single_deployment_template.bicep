@@ -9,7 +9,6 @@ param ContainerApps_HttpApi_NewRevisionName string =  toLower(utcNow())
 
 var StorageAccount_ApiVersion = '2018-07-01'
 var StorageAccount_Queue_Name = 'demoqueue'
-var ContainerApps_Environment_Id = ContainerApps_Environment.id
 
 resource StorageAccount 'Microsoft.Storage/storageAccounts@2021-01-01' = {
   name: StorageAccount_Name
@@ -52,11 +51,11 @@ resource log 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
   }
 }
 
-resource AppInsights 'Microsoft.Insights/Components@2020-02-02' = {
+resource AppInsights 'Microsoft.Insights/components@2020-02-02' = {
   name: AppInsights_Name
   location: Location
+  kind: 'web'
   properties: {
-    ApplicationId: AppInsights_Name
     Application_Type: 'web'
     Flow_Type: 'Redfield'
     Request_Source: 'CustomDeployment'
@@ -82,10 +81,9 @@ resource ContainerApps_Environment 'Microsoft.App/managedEnvironments@2022-03-01
 
 resource queuereader 'Microsoft.App/containerApps@2022-03-01' = {
   name: 'queuereader'
-  kind: 'containerapp'
   location: Location
   properties: {
-    managedEnvironmentId: ContainerApps_Environment_Id
+    managedEnvironmentId: ContainerApps_Environment.id
     configuration: {
       activeRevisionsMode: 'single'
       secrets: [
@@ -148,10 +146,9 @@ resource queuereader 'Microsoft.App/containerApps@2022-03-01' = {
 
 resource dashboardapp 'Microsoft.App/containerApps@2022-03-01' = {
   name: 'dashboardapp'
-  kind: 'containerapp'
   location: Location
   properties: {
-    managedEnvironmentId: ContainerApps_Environment_Id
+    managedEnvironmentId: ContainerApps_Environment.id
     configuration: {
       ingress: {
         external: true
@@ -160,7 +157,7 @@ resource dashboardapp 'Microsoft.App/containerApps@2022-03-01' = {
       dapr: {
         enabled: true
         appId: 'dashboardapp'
-        appProcotol: 'http'
+        appProtocol: 'http'
         appPort: 80
       }
     }
@@ -188,10 +185,9 @@ resource dashboardapp 'Microsoft.App/containerApps@2022-03-01' = {
 
 resource dashboardapi 'Microsoft.App/containerApps@2022-03-01' = {
   name: 'dashboardapi'
-  kind: 'containerapp'
   location: Location
   properties: {
-    managedEnvironmentId: ContainerApps_Environment_Id
+    managedEnvironmentId: ContainerApps_Environment.id
     configuration: {
       ingress: {
         external: true
@@ -200,7 +196,7 @@ resource dashboardapi 'Microsoft.App/containerApps@2022-03-01' = {
       dapr: {
         enabled: true
         appId: 'dashboardapi'
-        appProcotol: 'http'
+        appProtocol: 'http'
         appPort: 5000
       }
     }
@@ -232,10 +228,9 @@ resource dashboardapi 'Microsoft.App/containerApps@2022-03-01' = {
 
 resource storeapp 'Microsoft.App/containerApps@2022-03-01' = {
   name: 'storeapp'
-  kind: 'containerapp'
   location: Location
   properties: {
-    managedEnvironmentId: ContainerApps_Environment_Id
+    managedEnvironmentId: ContainerApps_Environment.id
     configuration: {
       ingress: {
         external: true
@@ -244,7 +239,7 @@ resource storeapp 'Microsoft.App/containerApps@2022-03-01' = {
       dapr: {
         enabled: true
         appId: 'storeapp'
-        appProcotol: 'http'
+        appProtocol: 'http'
         appPort: 3000
       }
     }
@@ -266,10 +261,9 @@ resource storeapp 'Microsoft.App/containerApps@2022-03-01' = {
 
 resource httpapi 'Microsoft.App/containerApps@2022-03-01' = {
   name: 'httpapi'
-  kind: 'containerapp'
   location: Location
   properties: {
-    managedEnvironmentId: ContainerApps_Environment_Id
+    managedEnvironmentId: ContainerApps_Environment.id
     configuration: {
       activeRevisionsMode: 'multiple'
       ingress: {
@@ -291,7 +285,7 @@ resource httpapi 'Microsoft.App/containerApps@2022-03-01' = {
       dapr: {
         enabled: true
         appId: 'httpapi'
-        appProcotol: 'http'
+        appProtocol: 'http'
         appPort: 80
       }
     }
