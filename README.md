@@ -1,8 +1,6 @@
-# Hands-on with Container Apps
+# Lunch Bytes November 2022 - Hands-on with Container Apps
 
 The purpose of this repo is to help you quickly get hands-on with Container Apps. It is meant to be consumed either through GitHub codespaces or through a local VS Code Dev Container. The idea being that everything you need from tooling to runtimes is already included in the Dev Container so it should be as simple as executing a run command.
-
-* **Date:** 2nd November 2022
 
 ## Scenario
 
