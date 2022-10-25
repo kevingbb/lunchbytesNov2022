@@ -1,0 +1,27 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "Location": {
+            "value": "northeurope"
+        },
+        "StorageAccount.Name": {
+            "value": "khcasa"
+        },
+        "LogAnalytics.Workspace.Name": {
+            "value": "khcala"
+        },
+        "AppInsights.Name": {
+            "value": "khcaai"
+        },
+        "ContainerApps.Environment.Name": {
+            "value": "khcaenv001"
+        },
+        "ContainerApps.HttpApi.CurrentRevisionName": {
+            "value": "green"
+        },
+        "ContainerApps.HttpApi.NewRevisionName": {
+            "value": "purple"
+        }
+    }
+}

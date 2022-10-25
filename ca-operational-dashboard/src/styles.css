@@ -1,0 +1,11 @@
+.App {
+  font-family: sans-serif;
+  width: 100%;
+  text-align: center;
+  align-content: center;    
+}
+.Chart{
+  width: 80%;
+  padding-left: 8%;
+  padding-top: 50px;
+}

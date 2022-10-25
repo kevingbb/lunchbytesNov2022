@@ -1,0 +1,16 @@
+{
+  "profiles": {
+    "QueueReader": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "DOTNET_ENVIRONMENT": "Development",
+        "QueueConnectionString": "",
+        "QueueName": ""
+      },
+      "dotnetRunMessages": "true"
+    },
+    "Docker": {
+      "commandName": "Docker"
+    }
+  }
+}
