@@ -25,7 +25,7 @@ There are two options:
 
 ### Getting Started
 
-You will need to install an Azure CLI extension to work with Container Apps.
+You will need to install an Azure CLI extension to work with Azure Container Apps.
 
 Run the following command.
 
@@ -48,7 +48,6 @@ az account show
 
 # In case not the right subscription
 az account set -s <subscription-id>
-
 ```
 
 Setup some variables to be used throughout the walkthrough.
@@ -58,7 +57,7 @@ Setup some variables to be used throughout the walkthrough.
 name=ca-$(cat /dev/urandom | tr -dc '[:lower:]' | fold -w ${1:-5} | head -n 1)
 # Set variables for the rest of the demo
 resourceGroup=${name}-rg
-location=northeurope
+location=westeurope
 containerAppEnv=${name}-env
 logAnalytics=${name}-la
 appInsights=${name}-ai
@@ -68,26 +67,13 @@ storageAccount=$(echo $name | tr -d -)sa
 Create the Resource Group where Azure Container Apps will be deployed.
 
 ```bash
-
 # Create Resource Group
 az group create --name $resourceGroup --location $location -o table
 ```
 
 ### Setup Solution in Single Deployment
 
-If you are not interested in following the story, and just want to see the final solution, then follows these steps and skip the rest.
-
-```bash
-az deployment group create \
-  -g $resourceGroup \
-  --template-file single_deployment_template.json \
-  --parameters @single_deployment_parameters.json \
-  --parameters ContainerApps.Environment.Name=$containerAppEnv \
-    LogAnalytics.Workspace.Name=$logAnalytics \
-    AppInsights.Name=$appInsights \
-    StorageAccount.Name=$storageAccount \
-    Location=$location
-```
+If you are not interested in following the story, and just want to deploy the final solution, then check out the [deploy](deploy/README.md) folder for ARM and Bicep deployments and skip the rest.
 
 ### Follow Story and Deploy initial version of the application
 
@@ -113,13 +99,6 @@ storeURL=https://storeapp.$(az containerapp env show -g $resourceGroup -n $conta
 echo $storeURL
 apiURL=https://httpapi.$(az containerapp env show -g $resourceGroup -n $containerAppEnv --query 'properties.defaultDomain' -o tsv)/Data
 echo $apiURL
-
-# Test Endpoints
-curl $storeURL && echo ""
-curl $apiURL && echo ""
-curl -X POST $apiURL?message=test
-curl $storeURL | jq .
-storeURL=https://storeapp.$(az containerapp env show -g $resourceGroup -n $containerAppEnv --query 'properties.defaultDomain' -o tsv)/store
 ```
 
 Let's see what happens if we call the URL of the store with curl.
@@ -127,17 +106,21 @@ Let's see what happens if we call the URL of the store with curl.
 > Alternatively, you can run `echo $storeURL` to get the URL for the application and then open that in a browser.
 
 ```bash
-curl $storeURL
+# Test Endpoints
+curl $storeURL && echo ""
+curl $apiURL && echo ""
+curl -X POST $apiURL?message=test
+curl $apiURL && echo ""
+curl $storeURL | jq .
 ```
 
-The response you should see is `[]` which means no data was returned. Something's not working, but what?
+The response you see has a message, but it is not the right one. Something's not working, but what?
 
 ContainerApps integrates with Application Insights and Log Analytics out of the box, no configuration required. You can either go to the Azure Portal -> the Log Analytics workspace in the resource group we're using for this demo and run the following query to view the logs for the `queuereader` application, or you can run it via the command line so you don't have to leave your IDE.
 
 ```text
 ContainerAppConsoleLogs_CL
 | where ContainerAppName_s has "queuereader" and ContainerName_s has "queuereader"
-| where Log_s has "null"
 | project TimeGenerated, ContainerAppName_s, ContainerName_s, Log_s
 | order by TimeGenerated desc
 ```
@@ -151,20 +134,18 @@ workspaceId=$(az monitor log-analytics workspace show -n $logAnalytics -g $resou
 az monitor log-analytics query -w $workspaceId --analytics-query "ContainerAppConsoleLogs_CL | where ContainerAppName_s has 'queuereader' and ContainerName_s has 'queuereader' | project TimeGenerated, ContainerAppName_s, ContainerName_s, Log_s | order by TimeGenerated desc"
 ```
 
-You should see a number of log file entries which will likely all contain the same message. You should see something like the following:
+You should see a number of log file entries which will contain a similar message. You should see something like the following:
 
-![Image of an Azure Log Analytics log entry showing an error from the queuereader application indicating that a config value is missing](/images/LogAnalyticsDaprPortError.png)
-
-> "Log_s": "      `[{"id":"f30e1eb6-d9d1-458b-b8d3-327e5597ffc7","message":"57e88c1e-f4a4-4c66-8eb5-128bb235b08d"}]`)",
+> "Log_s": "      Message ID: '0df9b2e0-7d94-4ac4-8870-bff035dee20d', contents: '8febea3b-b373-49ba-8fb6-54843cbe7b52'",
 
 ```bash
 # Check httpapi next
 az monitor log-analytics query -w $workspaceId --analytics-query "ContainerAppConsoleLogs_CL | where ContainerAppName_s has 'httpapi' and ContainerName_s has 'httpapi' | project TimeGenerated, ContainerAppName_s, ContainerName_s, Log_s | order by TimeGenerated desc"
 ```
 
-You should see a number of log file entries which will likely all contain a similar message. You should see something like the following:
+You should see a number of log file entries which will contain a similar message. You should see something like the following:
 
-> "Log_s": "      Message Contents: 'TODO: MISSING'')",
+> "Log_s": "      Message Contents: 'TODO: MISSING'",
 
 ```bash
 # Look at httpapi code
@@ -232,7 +213,7 @@ To implement the traffic split, the following has been added to the deployment t
 
 Effectively, we're asking for 80% of traffic to be sent to the current version (revision) of the application and 20% to be sent to the new version that's about to be deployed.
 
-### Deploy Version 2
+### Deploy fixed version of httpapi with 80/20 traffic splitting
 
 We'll repeat the deployment command from earlier, but we've updated our template to use version 2 of the queuereader application.
 
@@ -273,7 +254,7 @@ az monitor log-analytics query -w $workspaceId --analytics-query "ContainerAppCo
   },
   {
     "id": "318e72bb-8c55-486c-99ec-18a5bd76bc1d",
-    "message": "01/03/2022 13:28:33 +00:00 -- secondtest"
+    "message": "10/26/2022 13:28:33 +00:00 -- hello"
   }
 ]
 ```
@@ -284,7 +265,7 @@ We configured traffic splitting, so let's see that in action. First we will need
 
 So, is our app ready for primetime now? Let's change things so that the new app is now receiving all of the traffic, plus we'll also setup some scaling rules. This will allow the container apps to scale up when things are busy, and scale to zero when things are quiet.
 
-## Deploy version 3
+## Deploy autoscaling version with rules
 
 One final time, we'll now deploy the new configuration with scaling configured. We will also add a simple api and dashboard for monitoring the messages flow.
 
@@ -304,17 +285,17 @@ First, let's look at the new Dashboard.
 
 ```bash
 # Get Dashboard UI
-dashboardURL=https://dashboardapp.$(az containerapp env show -g $resourceGroup -n ${name}-env --query 'properties.defaultDomain' -o tsv)
+dashboardURL=https://dashboardapp.$(az containerapp env show -g $resourceGroup -n $containerAppEnv --query 'properties.defaultDomain' -o tsv)
 echo 'Open the URL in your browser of choice:' $dashboardURL
 
 # Check updated version of the solution (everything should be correct, no traffic splitting)
 hey -m POST -n 10 -c 1 $apiURL?message=testscale
-```
 
-Let's check the number of orders in the queue
+# Let's check the number of orders in the queue
+curl $apiURL && echo ""
 
-```bash
-curl $apiURL
+# Check Store URL
+curl $storeURL | jq . | grep testscale
 ```
 
 Now let's see scaling in action. To do this, we will generate a large amount of messages which should cause the applications to scale up to cope with the demand. To demonstrate this, a script that uses the `tmux` command is provided in the `scripts` folder of this repository. Run the following commands:
