@@ -20,8 +20,8 @@ In this sample you will see how to:
 
 There are two options:
 
-1. [Access to GitHub Codespaces](#getting-started-via-codespaces)
-1. [VS Code + Local Dev Container](#getting-started-via-vs-code-and-local-dev-container)
+1. Access to GitHub Codespaces
+1. VS Code + Local Dev Container
 
 ### Getting Started
 
@@ -155,7 +155,7 @@ code /workspaces/lunchbytesNov2022/httpapi/Controllers/DataController.cs
 
 Ok, that's something but that's not the message we sent. Let's take a look at the application code
 
-**DataController.cs**
+**DataController.cs** (version 1)
 
 ```c#
 ...
