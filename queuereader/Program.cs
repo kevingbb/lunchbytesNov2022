@@ -22,7 +22,6 @@ if (app.Environment.IsDevelopment()) {app.UseDeveloperExceptionPage();}
 app.MapPost("/message", [Topic("servicebus-pubsub", "orders")] async (ILogger<Program> logger, HttpClient httpClient, [FromServices] Store store, Message receivedMessage) => {
     try {
         logger.LogInformation($"Content Received: '{receivedMessage.message}'");
-        // string messageId = Guid.NewGuid().ToString();
         CancellationTokenSource source = new CancellationTokenSource();
         CancellationToken cancellationToken = source.Token;
         await httpClient.PostAsync(store.getStoreUrl(), JsonContent.Create(new { message = receivedMessage.message }), cancellationToken);

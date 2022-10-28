@@ -8,15 +8,14 @@
 # Setup Variables
 name=ca-$(cat /dev/urandom | tr -dc '[:lower:]' | fold -w ${1:-5} | head -n 1)
 echo $name
-#name=ca-sdlrr
+#name=ca-khqfz
 resourceGroup=${name}-rg
 location=westeurope
 containerAppEnv=${name}-env
 logAnalytics=${name}-la
 appInsights=${name}-ai
 storageAccount=$(echo $name | tr -d -)sa
-#servicebusNamespace=$(echo $name | tr -d -)sb
-servicebusNamespace=khsbdaprdemotest03
+servicebusNamespace=$(echo $name | tr -d -)sb
 
 
 # Create Resource Group
@@ -48,7 +47,7 @@ curl $storeURL | jq .
 # Troubleshoot using out of the box Azure Monitor log integration
 workspaceId=$(az monitor log-analytics workspace show -n $logAnalytics -g $resourceGroup --query "customerId" -o tsv)
 # Check queuereader first
-az monitor log-analytics query -w $workspaceId --analytics-query "ContainerAppConsoleLogs_CL | where ContainerAppName_s has 'queuereader' and ContainerName_s has 'queuereader' | where Log_s has 'Message' | project TimeGenerated, ContainerAppName_s, ContainerName_s, Log_s | order by TimeGenerated desc"
+az monitor log-analytics query -w $workspaceId --analytics-query "ContainerAppConsoleLogs_CL | where ContainerAppName_s has 'queuereader' and ContainerName_s has 'queuereader' | where Log_s has 'Content' | project TimeGenerated, ContainerAppName_s, ContainerName_s, Log_s | order by TimeGenerated desc"
 # Check httpapi next
 az monitor log-analytics query -w $workspaceId --analytics-query "ContainerAppConsoleLogs_CL | where ContainerAppName_s has 'httpapi' and ContainerName_s has 'httpapi' | where Log_s has 'Message' | project TimeGenerated, ContainerAppName_s, ContainerName_s, Log_s | order by TimeGenerated desc"
 
@@ -102,3 +101,15 @@ cd /workspaces/lunchbytesNov2022/scripts
 
 # Clean everything up
 az group delete -g $resourceGroup --no-wait -y
+
+
+az deployment group create \
+  -g $resourceGroup \
+  --template-file sb_template.json \
+  --parameters @sb_parameters.json \
+  --parameters ContainerApps.Environment.Name=$containerAppEnv \
+    LogAnalytics.Workspace.Name=$logAnalytics \
+    AppInsights.Name=$appInsights \
+    StorageAccount.Name=$storageAccount \
+    Location=$location \
+    ServiceBus.NamespaceName=$servicebusNamespace

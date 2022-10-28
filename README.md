@@ -62,6 +62,7 @@ containerAppEnv=${name}-env
 logAnalytics=${name}-la
 appInsights=${name}-ai
 storageAccount=$(echo $name | tr -d -)sa
+servicebusNamespace=$(echo $name | tr -d -)sb
 ```
 
 Create the Resource Group where Azure Container Apps will be deployed.
@@ -121,7 +122,7 @@ ContainerApps integrates with Application Insights and Log Analytics out of the 
 ```text
 ContainerAppConsoleLogs_CL
 | where ContainerAppName_s has "queuereader" and ContainerName_s has "queuereader"
-| where Log_s has 'Message'
+| where Log_s has 'Content'
 | project TimeGenerated, ContainerAppName_s, ContainerName_s, Log_s
 | order by TimeGenerated desc
 ```
@@ -132,12 +133,12 @@ Alternatively, if you prefer to stay in the CLI, you can run the Log Analytics q
 # Troubleshoot using out of the box Azure Monitor log integration
 workspaceId=$(az monitor log-analytics workspace show -n $logAnalytics -g $resourceGroup --query "customerId" -o tsv)
 # Check queuereader first
-az monitor log-analytics query -w $workspaceId --analytics-query "ContainerAppConsoleLogs_CL | where ContainerAppName_s has 'queuereader' and ContainerName_s has 'queuereader' | where Log_s has 'Message' | project TimeGenerated, ContainerAppName_s, ContainerName_s, Log_s | order by TimeGenerated desc"
+az monitor log-analytics query -w $workspaceId --analytics-query "ContainerAppConsoleLogs_CL | where ContainerAppName_s has 'queuereader' and ContainerName_s has 'queuereader' | where Log_s has 'Content' | project TimeGenerated, ContainerAppName_s, ContainerName_s, Log_s | order by TimeGenerated desc"
 ```
 
 You should see a number of log file entries which will contain a similar message. You should see something like the following:
 
-> "Log_s": "      Message ID: '0df9b2e0-7d94-4ac4-8870-bff035dee20d', contents: '8febea3b-b373-49ba-8fb6-54843cbe7b52'",
+> "Log_s": "      Content Received: '0df9b2e0-7d94-4ac4-8870-bff035dee20d',
 
 ```bash
 # Check httpapi next
@@ -246,11 +247,11 @@ hey -m POST -n 25 -c 1 $apiURL?message=hello
 Now let's see what happens if we access that URL
 
 ``` bash
-# Check Store URL
-curl $storeURL | jq
-
 # Check queuereader logs
-az monitor log-analytics query -w $workspaceId --analytics-query "ContainerAppConsoleLogs_CL | where ContainerAppName_s has 'queuereader' and ContainerName_s has 'queuereader' | where Log_s has 'Message' | project TimeGenerated, ContainerAppName_s, ContainerName_s, Log_s | order by TimeGenerated desc"
+az monitor log-analytics query -w $workspaceId --analytics-query "ContainerAppConsoleLogs_CL | where ContainerAppName_s has 'queuereader' and ContainerName_s has 'queuereader' | where Log_s has 'Content' | project TimeGenerated, ContainerAppName_s, ContainerName_s, Log_s | order by TimeGenerated desc"
+
+# Check Store URL
+curl $storeURL | jq .
 ```
 
 ```json

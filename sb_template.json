@@ -91,6 +91,34 @@
             }
         },
         {
+            "apiVersion": "2018-01-01-preview",
+            "name": "[parameters('ServiceBus.NamespaceName')]",
+            "type": "Microsoft.ServiceBus/namespaces",
+            "location": "[parameters('Location')]",
+            "sku": {
+              "name": "Standard"
+            },
+            "properties": {},
+            "resources": [{
+                "apiVersion": "2018-01-01-preview",
+                "name": "orders",
+                "type": "Topics",
+                "dependsOn": [
+                    "[resourceId('Microsoft.ServiceBus/namespaces', parameters('ServiceBus.NamespaceName'))]"
+                ],
+                "properties": {},
+                "resources": [{
+                    "apiVersion": "2018-01-01-preview",
+                    "name": "queuereader",
+                    "type": "Subscriptions",
+                    "dependsOn": [
+                        "orders"
+                    ],
+                    "properties": {}
+                }]
+            }]
+        },
+        {
             "type": "Microsoft.App/managedEnvironments",
             "apiVersion": "2022-03-01",
             "name": "[parameters('ContainerApps.Environment.Name')]",
@@ -129,12 +157,104 @@
                             "queuereader"
                         ]
                     }
+                },
+                {
+                    "type": "daprComponents",
+                    "name": "azureblobs-state",
+                    "apiVersion": "2022-03-01",
+                    "dependsOn": [
+                        "[resourceId('Microsoft.App/managedEnvironments', parameters('ContainerApps.Environment.Name'))]"
+                    ],
+                    "properties": {
+                        "componentType": "state.azure.blobstorage",
+                        "version": "v1",
+                        "metadata": [
+                            {
+                                "name": "accountName",
+                                "value": "[parameters('StorageAccount.Name')]"
+                            },
+                            {
+                                "name": "accountKey",
+                                "value": "[listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('StorageAccount.Name')), variables('StorageAccount.ApiVersion')).keys[0].value]"
+                            },
+                            {
+                                "name": "containerName",
+                                "value": "store"
+                            }
+                        ],
+                        "scopes": [
+                            "storeapp"
+                        ]
+                    }
                 }
             ],
             "dependsOn": [
                 "[variables('Workspace.Resource.Id')]",
                 "[resourceId('Microsoft.Storage/storageAccounts', parameters('StorageAccount.Name'))]",
                 "[resourceId('Microsoft.ServiceBus/namespaces', parameters('ServiceBus.NamespaceName'))]"
+            ]
+        },
+        {
+            "name": "storeapp",
+            "type": "Microsoft.App/containerApps",
+            "apiVersion": "2022-03-01",
+            "kind": "containerapp",
+            "location": "[parameters('Location')]",
+            "properties": {
+                "managedEnvironmentId": "[variables('ContainerApps.Environment.Id')]",
+                "configuration": {
+                    "activeRevisionsMode": "single",
+                    "ingress": {
+                        "external": true,
+                        "targetPort": 3000
+                    },
+                    "secrets": [
+                        {
+                            "name": "blobconnectionstring",
+                            "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', parameters('StorageAccount.Name'), ';AccountKey=', listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('StorageAccount.Name')), variables('StorageAccount.ApiVersion')).keys[0].value, ';EndpointSuffix=core.windows.net')]"
+                        }
+                    ],
+                    "dapr": {
+                        "enabled": true,
+                        "appId": "storeapp",
+                        "appProcotol": "http",
+                        "appPort": 3000
+                    }
+                },
+                "template": {
+                    "containers": [
+                        {
+                            "image": "kevingbb/storeapp:v1.1",
+                            "name": "storeapp",
+                            "env": [
+                                {
+                                    "name": "TargetApp",
+                                    "value": "storeapp"
+                                },
+                                {
+                                    "name": "STATE_STORE_NAME",
+                                    "value": "azureblobs-state "
+                                },
+                                {
+                                    "name": "BLOB_CONNECTION_STRING",
+                                    "secretRef": "blobconnectionstring"
+                                },
+                                {
+                                    "name": "CONTAINER_NAME",
+                                    "value": "store"
+                                }
+                            ]
+                        }
+                    ],
+                    "scale": {
+                        "minReplicas": 1,
+                        "maxReplicas": 1,
+                        "rules": []
+                    }
+                }
+            },
+            "dependsOn": [
+                "[variables('ContainerApps.Environment.Id')]"
             ]
         },
         {
@@ -147,30 +267,29 @@
                 "managedEnvironmentId": "[variables('ContainerApps.Environment.Id')]",
                 "configuration": {
                     "activeRevisionsMode": "single",
+                    "ingress": {
+                        "external": false,
+                        "targetPort": 80
+                    },
                     "secrets": [
-                    {
-                        "name": "queueconnection",
-                        "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', parameters('StorageAccount.Name'), ';AccountKey=', listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('StorageAccount.Name')), variables('StorageAccount.ApiVersion')).keys[0].value, ';EndpointSuffix=core.windows.net')]"
-                    }],
+                        {
+                            "name": "sbconnection",
+                            "value": "[listKeys(resourceId('Microsoft.ServiceBus/namespaces/authorizationRules', parameters('ServiceBus.NamespaceName'), 'RootManageSharedAccessKey'), '2017-04-01').primaryConnectionString]"
+                        }
+                    ],
                     "dapr": {
                         "enabled": true,
-                        "appId": "queuereader"
+                        "appId": "queuereader",
+                        "appProcotol": "http",
+                        "appPort": 80
                     }
                 },
                 "template": {
                     "containers": [
                         {
-                            "image": "kevingbb/queuereader:v0.1",
+                            "image": "kevingbb/queuereader:v1.1",
                             "name": "queuereader",
                             "env": [
-                                {
-                                    "name": "QueueName",
-                                    "value": "demoqueue"
-                                },
-                                {
-                                    "name": "QueueConnectionString",
-                                    "secretref": "queueconnection"
-                                },
                                 {
                                     "name": "TargetApp",
                                     "value": "storeapp"
@@ -183,16 +302,17 @@
                         "maxReplicas": 5,
                         "rules": [
                             {
-                                "name": "myqueuerule",
+                                "name": "sbscalerule",
                                 "custom": {
-                                    "type": "azure-queue",
+                                    "type": "azure-servicebus",
                                     "metadata": {
-                                        "queueName": "demoqueue",
-                                        "queueLength": "10"
+                                        "topicName": "orders",
+                                        "subscriptionName": "queuereader",
+                                        "messageCount": "10"
                                     },
                                     "auth": [
                                         {
-                                            "secretRef": "queueconnection",
+                                            "secretRef": "sbconnection",
                                             "triggerParameter": "connection"
                                         }
                                     ]
@@ -207,7 +327,7 @@
             ]
         },
         {
-            "name": "dashboardapp",
+            "name": "httpapi",
             "type": "Microsoft.App/containerApps",
             "apiVersion": "2022-03-01",
             "kind": "containerapp",
@@ -215,34 +335,57 @@
             "properties": {
                 "managedEnvironmentId": "[variables('ContainerApps.Environment.Id')]",
                 "configuration": {
+                    "activeRevisionsMode": "multiple",
                     "ingress": {
                         "external": true,
-                        "targetPort": 80
+                        "targetPort": 80,
+                        "traffic":[
+                            {
+                                "latestRevision": true,
+                                "weight": 100
+                            }
+                        ]
                     },
+                    "secrets": [
+                        {
+                            "name": "sbconnection",
+                            "value": "[listKeys(resourceId('Microsoft.ServiceBus/namespaces/authorizationRules', parameters('ServiceBus.NamespaceName'), 'RootManageSharedAccessKey'), '2017-04-01').primaryConnectionString]"
+                        }
+                    ],
                     "dapr": {
                         "enabled": true,
-                        "appId": "dashboardapp",
+                        "appId": "httpapi",
                         "appProcotol": "http",
                         "appPort": 80
                     }
                 },
                 "template": {
+                    "revisionSuffix": "[parameters('ContainerApps.HttpApi.NewRevisionName')]",
                     "containers": [
                         {
-                            "image": "kevingbb/ca-operational-dashboard:v0.1",
-                            "name": "dashboardapp",
+                            "image": "kevingbb/httpapi:v1.2",
+                            "name": "httpapi",
                             "env": [
                                 {
-                                    "name": "REACT_APP_API",
-                                    "value": "dashboardapi"
+                                    "name": "SBConnectionString",
+                                    "secretref": "sbconnection"
                                 }
                             ]
                         }
                     ],
                     "scale": {
                         "minReplicas": 1,
-                        "maxReplicas": 1,
-                        "rules": []
+                        "maxReplicas": 10,
+                        "rules": [
+                            {
+                                "name": "httpscalingrule",
+                                "http": {
+                                    "metadata": {
+                                        "concurrentRequests": "10"
+                                    }
+                                }
+                            }
+                        ]
                     }
                 }
             },
@@ -273,13 +416,9 @@
                 "template": {
                     "containers": [
                         {
-                            "image": "kevingbb/ca-operational-api:v0.1",
+                            "image": "kevingbb/ca-operational-api:v1.1",
                             "name": "dashboardapi",
-                            "env":[
-                                {
-                                "name": "DAPR_HTTP_PORT",
-                                "value": "3500"
-                                },
+                            "env": [
                                 {
                                     "name": "TARGET_APP",
                                     "value": "storeapp"
@@ -299,7 +438,7 @@
             ]
         },
         {
-            "name": "storeapp",
+            "name": "dashboardapp",
             "type": "Microsoft.App/containerApps",
             "apiVersion": "2022-03-01",
             "kind": "containerapp",
@@ -309,20 +448,26 @@
                 "configuration": {
                     "ingress": {
                         "external": true,
-                        "targetPort": 3000
+                        "targetPort": 80
                     },
                     "dapr": {
                         "enabled": true,
-                        "appId": "storeapp",
+                        "appId": "dashboardapp",
                         "appProcotol": "http",
-                        "appPort": 3000
+                        "appPort": 80
                     }
                 },
                 "template": {
                     "containers": [
                         {
-                            "image": "kevingbb/storeapp:v0.1",
-                            "name": "storeapp"
+                            "image": "kevingbb/ca-operational-dashboard:v1.1",
+                            "name": "dashboardapp",
+                            "env": [
+                                {
+                                    "name": "REACT_APP_API",
+                                    "value": "dashboardapi"
+                                }
+                            ]
                         }
                     ],
                     "scale": {
@@ -335,86 +480,6 @@
             "dependsOn": [
                 "[variables('ContainerApps.Environment.Id')]"
             ]
-        },
-        {
-            "name": "httpapi",
-            "type": "Microsoft.App/containerApps",
-            "apiVersion": "2022-03-01",
-            "kind": "containerapp",
-            "location": "[parameters('Location')]",
-            "properties": {
-                "managedEnvironmentId": "[variables('ContainerApps.Environment.Id')]",
-                "configuration": {
-                    "activeRevisionsMode": "multiple",
-                    "ingress": {
-                        "external": true,
-                        "targetPort": 80,
-                        "traffic":[
-                            {
-                                "latestRevision": true,
-                                "weight": 100
-                            }
-                        ]
-                    },
-                    "secrets": [
-                    {
-                        "name": "queueconnection",
-                        "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', parameters('StorageAccount.Name'), ';AccountKey=', listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('StorageAccount.Name')), variables('StorageAccount.ApiVersion')).keys[0].value, ';EndpointSuffix=core.windows.net')]"
-                    }],
-                    "dapr": {
-                        "enabled": true,
-                        "appId": "httpapi",
-                        "appProcotol": "http",
-                        "appPort": 80
-                    }
-                },
-                "template": {
-                    "revisionSuffix": "[parameters('ContainerApps.HttpApi.NewRevisionName')]",
-                    "containers": [
-                        {
-                            "image": "kevingbb/httpapi:v0.2",
-                            "name": "httpapi",
-                            "env": [
-                                {
-                                    "name": "QueueName",
-                                    "value": "demoqueue"
-                                },
-                                {
-                                    "name": "QueueConnectionString",
-                                    "secretref": "queueconnection"
-                                }
-                            ]
-                        }
-                    ],
-                    "scale": {
-                        "minReplicas": 1,
-                        "maxReplicas": 10,
-                        "rules": [
-                            {
-                                "name": "httpscalingrule",
-                                "http": {
-                                    "metadata": {
-                                        "concurrentRequests": "10"
-                                    }
-                                }
-                            }
-                        ]
-                    }
-                }
-            },
-            "dependsOn": [
-                "[variables('ContainerApps.Environment.Id')]"
-            ]
-        },
-        {
-            "apiVersion": "2018-01-01-preview",
-            "name": "[parameters('ServiceBus.NamespaceName')]",
-            "type": "Microsoft.ServiceBus/namespaces",
-            "location": "[parameters('Location')]",
-            "sku": {
-              "name": "Standard"
-            },
-            "properties": {}
         }
     ]
 }
