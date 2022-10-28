@@ -1,12 +1,15 @@
 // namespace HttpApi.Controllers
 // {
-//     using Azure.Storage.Queues;
-//     using Azure.Storage.Queues.Models;
 //     using Microsoft.AspNetCore.Mvc;
 //     using Microsoft.Extensions.Logging;
 //     using System;
 //     using System.Threading.Tasks;
-//     using System.Net.Http;
+//     using Dapr;
+//     using Dapr.Client;
+//     using System.Threading;
+//     using System.Text.Json.Serialization;
+//     using Azure.Messaging.ServiceBus;
+//     using System.Collections.Generic;
 
 //     [ApiController]
 //     [Route("[controller]")]
@@ -14,19 +17,30 @@
 //     {
 
 //         private readonly ILogger<DataController> logger;
-//         private readonly QueueClient queueClient;
+//         private readonly DaprClient daprClient;
+//         private readonly string PUBSUB_NAME = "servicebus-pubsub";
+//         private readonly string TOPIC_NAME = "orders";
+//         private readonly string SUBSCRIPTION_NAME = "queuereader";
+//         public record Message([property: JsonPropertyName("message")] string message);
+//         private readonly ServiceBusClient sbClient;
 
-//         public DataController(ILogger<DataController> logger, QueueClient queueClient)
+//         public DataController(ILogger<DataController> logger, DaprClient daprClient, ServiceBusClient sbClient)
 //         {
 //             this.logger = logger;
-//             this.queueClient = queueClient;
+//             this.daprClient = daprClient;
+//             this.sbClient = sbClient;
 //         }
 //         [HttpGet]
 //         public async Task<string> GetAsync()
 //         {
-//             QueueProperties properties = await this.queueClient.GetPropertiesAsync();
+//             CancellationTokenSource source = new CancellationTokenSource();
+//             CancellationToken cancellationToken = source.Token;
 
-//             return $"Queue '{this.queueClient.Name}' has {properties.ApproximateMessagesCount} message{(properties.ApproximateMessagesCount != 1 ? "s" : "")}";
+//             ServiceBusReceiver receiver = sbClient.CreateReceiver(TOPIC_NAME, SUBSCRIPTION_NAME);
+//             IReadOnlyList<ServiceBusReceivedMessage> peekedMessages = await receiver.PeekMessagesAsync(20000, null, cancellationToken);
+            
+//             logger.LogInformation($"Store Subscriber Count: '{peekedMessages.Count}'");
+//             return $"Store Subscriber '{SUBSCRIPTION_NAME}' has {peekedMessages.Count} message{(peekedMessages.Count != 1 ? "s" : "")}";
 //         }
 
 //         [HttpPost]
@@ -34,9 +48,12 @@
 //         {
 //             try
 //             {
-//                 await queueClient.SendMessageAsync(DateTimeOffset.Now.ToString() + " -- " + message);
+//                 CancellationTokenSource source = new CancellationTokenSource();
+//                 CancellationToken cancellationToken = source.Token;
+//                 var pubsubMessage = new Message (DateTimeOffset.Now.ToString() + " -- " + message);
+//                 //Using Dapr SDK to publish a topic
+//                 await daprClient.PublishEventAsync(PUBSUB_NAME, TOPIC_NAME, pubsubMessage , cancellationToken);
 //                 logger.LogInformation($"Message Contents: '{message}'");
-
 //                 Ok();
 //             }
 //             catch (Azure.RequestFailedException rfe)
@@ -46,14 +63,16 @@
 //                 this.Response.StatusCode = 503;
 //                 this.Response.Headers.Add("Retry-After", "10");
 //             }
-//             catch (HttpRequestException hre)
-//             {
-//                 logger.LogError($"Something went wrong writing to the store: {hre.Message}");
-//             }
-//             catch (Exception e)
-//             {
-//                 logger.LogError($"Something went wrong: {e.Message}");
-//             }
 //         }
+
+//         // // For testing pubsub in a single application.
+//         // // Subscribe to a topic 
+//         // [Topic("servicebus-pubsub", "orders")]
+//         // [HttpPost("message")]
+//         // public ActionResult<string> getMessage(Message message)
+//         // {
+//         //     logger.LogInformation("Subscriber received : " + message);
+//         //     return Ok(message);
+//         // }
 //     }
 // }

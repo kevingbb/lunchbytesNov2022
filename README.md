@@ -121,6 +121,7 @@ ContainerApps integrates with Application Insights and Log Analytics out of the 
 ```text
 ContainerAppConsoleLogs_CL
 | where ContainerAppName_s has "queuereader" and ContainerName_s has "queuereader"
+| where Log_s has 'Message'
 | project TimeGenerated, ContainerAppName_s, ContainerName_s, Log_s
 | order by TimeGenerated desc
 ```
@@ -131,7 +132,7 @@ Alternatively, if you prefer to stay in the CLI, you can run the Log Analytics q
 # Troubleshoot using out of the box Azure Monitor log integration
 workspaceId=$(az monitor log-analytics workspace show -n $logAnalytics -g $resourceGroup --query "customerId" -o tsv)
 # Check queuereader first
-az monitor log-analytics query -w $workspaceId --analytics-query "ContainerAppConsoleLogs_CL | where ContainerAppName_s has 'queuereader' and ContainerName_s has 'queuereader' | project TimeGenerated, ContainerAppName_s, ContainerName_s, Log_s | order by TimeGenerated desc"
+az monitor log-analytics query -w $workspaceId --analytics-query "ContainerAppConsoleLogs_CL | where ContainerAppName_s has 'queuereader' and ContainerName_s has 'queuereader' | where Log_s has 'Message' | project TimeGenerated, ContainerAppName_s, ContainerName_s, Log_s | order by TimeGenerated desc"
 ```
 
 You should see a number of log file entries which will contain a similar message. You should see something like the following:
@@ -140,7 +141,7 @@ You should see a number of log file entries which will contain a similar message
 
 ```bash
 # Check httpapi next
-az monitor log-analytics query -w $workspaceId --analytics-query "ContainerAppConsoleLogs_CL | where ContainerAppName_s has 'httpapi' and ContainerName_s has 'httpapi' | project TimeGenerated, ContainerAppName_s, ContainerName_s, Log_s | order by TimeGenerated desc"
+az monitor log-analytics query -w $workspaceId --analytics-query "ContainerAppConsoleLogs_CL | where ContainerAppName_s has 'httpapi' and ContainerName_s has 'httpapi' | where Log_s has 'Message' | project TimeGenerated, ContainerAppName_s, ContainerName_s, Log_s | order by TimeGenerated desc"
 ```
 
 You should see a number of log file entries which will contain a similar message. You should see something like the following:
@@ -163,10 +164,13 @@ Ok, that's something but that's not the message we sent. Let's take a look at th
   {
       try
       {
+          CancellationTokenSource source = new CancellationTokenSource();
+          CancellationToken cancellationToken = source.Token;
           // TODO: Replace with Message from querystring.
-          await queueClient.SendMessageAsync(Guid.NewGuid().ToString());
+          var pubsubMessage = new Message (Guid.NewGuid().ToString());
+          //Using Dapr SDK to publish a topic
+          await daprClient.PublishEventAsync(PUBSUB_NAME, TOPIC_NAME, pubsubMessage , cancellationToken);
           logger.LogInformation($"Message Contents: 'TODO: MISSING'");
-
           Ok();
       }
 ...
@@ -182,9 +186,12 @@ It looks like the code is set to send a GUID, not the message itself. Must have 
   {
       try
       {
-          await queueClient.SendMessageAsync(DateTimeOffset.Now.ToString() + " -- " + message);
+          CancellationTokenSource source = new CancellationTokenSource();
+          CancellationToken cancellationToken = source.Token;
+          var pubsubMessage = new Message (DateTimeOffset.Now.ToString() + " -- " + message);
+          //Using Dapr SDK to publish a topic
+          await daprClient.PublishEventAsync(PUBSUB_NAME, TOPIC_NAME, pubsubMessage , cancellationToken);
           logger.LogInformation($"Message Contents: '{message}'");
-
           Ok();
       }
 ```

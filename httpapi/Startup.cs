@@ -1,13 +1,13 @@
 namespace HttpApi
 {
-    using Azure.Storage.Queues;
+    using System;
     using Microsoft.AspNetCore.Builder;
     using Microsoft.AspNetCore.Hosting;
     using Microsoft.Extensions.Configuration;
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.Hosting;
     using Microsoft.OpenApi.Models;
-    using System;
+    using Azure.Messaging.ServiceBus;
 
     public class Startup
     {
@@ -23,11 +23,14 @@ namespace HttpApi
         {
 
             services.AddControllers();
-            services.AddSingleton(typeof(QueueClient), this.getQueueClient());
+            services.AddSingleton(typeof(ServiceBusClient), this.getServiceBusClient());
             services.AddSwaggerGen(c =>
             {
                 c.SwaggerDoc("v1", new OpenApiInfo { Title = "HttpApi", Version = "v1" });
             });
+
+            // Add Dapr
+            services.AddControllers().AddDapr();
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
@@ -40,34 +43,32 @@ namespace HttpApi
                 app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "HttpApi v1"));
             }
 
+            // Configure Dapr Middleware
+            app.UseCloudEvents();
+
             app.UseRouting();
 
             app.UseEndpoints(endpoints =>
             {
                 endpoints.MapControllers();
+                endpoints.MapSubscribeHandler();
             });
         }
 
         /// <summary>
-        /// Creates a QueueClient or throws ApplicationException if there are input errors.
+        /// Creates a ServiceBusClient or throws ApplicationException if there are input errors.
         /// </summary>
         /// <returns></returns>
-        private QueueClient getQueueClient()
+        private ServiceBusClient getServiceBusClient()
         {
-            string connectionString = this.Configuration["QueueConnectionString"];
-            string queueName = this.Configuration["QueueName"];
+            string connectionString = this.Configuration["SBConnectionString"];
 
             if (String.IsNullOrEmpty(connectionString))
             {
-                throw new ArgumentNullException("'QueueConnectionString' config value is required. Please add an environment variable or app setting.");
+                throw new ArgumentNullException("'SBConnectionString' config value is required. Please add an environment variable or app setting.");
             }
 
-            if (String.IsNullOrEmpty(queueName))
-            {
-                throw new ArgumentNullException("'QueueName' config value is required. Please add an environment variable or app setting.");
-            }
-
-            return new QueueClient(connectionString, queueName);
+            return new ServiceBusClient(connectionString);
         }
     }
 }
