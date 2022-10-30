@@ -1,6 +1,6 @@
 const { config } = require('dotenv');
 const { DaprClient, CommunicationProtocolEnum } = require('@dapr/dapr');
-const { BlobServiceClient } = require('@azure/storage-blob');
+const { TableClient, odata } = require("@azure/data-tables");
 const express = require('express');
 const app = express();
 app.use(express.json());
@@ -11,31 +11,20 @@ const { randomUUID } = require('crypto');
 
 const client = new DaprClient("localhost", process.env.DAPR_HTTP_PORT, CommunicationProtocolEnum.HTTP);
 const STATE_STORE_NAME = process.env.STATE_STORE_NAME;
-const BLOB_CONNECTION_STRING = process.env.BLOB_CONNECTION_STRING;
-const CONTAINER_NAME = process.env.CONTAINER_NAME;
+const STORAGE_CONNECTION_STRING = process.env.STORAGE_CONNECTION_STRING;
+const TABLE_NAME = process.env.TABLE_NAME;
 
-// Create the BlobServiceClient object which will be used to create a container client
-const blobServiceClient = BlobServiceClient.fromConnectionString(BLOB_CONNECTION_STRING);
+// Create the TableStorageClient object which will be used to create a container client
+const tableClient = TableClient.fromConnectionString(STORAGE_CONNECTION_STRING, TABLE_NAME);
 
-function streamToBuffer(stream) {
-    return new Promise((resolve, reject) => {
-        const chunks = [];
-        stream.on("data", (data) => {
-        chunks.push(Buffer.isBuffer(data) ? data : Buffer.from(data));
-        });
-        stream.on("end", () => {
-        resolve(Buffer.concat(chunks));
-        });
-        stream.on("error", reject);
-    });
-}
-
-app.get('/store/count', async (_req, res) => {
-    // Get a reference to a container
-    const containerClient = blobServiceClient.getContainerClient(CONTAINER_NAME);
-    // List the blob(s) in the container.
+app.get('/count', async (_req, res) => {
+    const partitionKey = "storeapp";
     var count = 0;
-    for await (const blob of containerClient.listBlobsFlat()) {
+    // Retrieve minimal amount back and then iterate over results to count.
+    const entities = tableClient.listEntities({
+        queryOptions: { filter: odata`PartitionKey eq ${partitionKey}`, select: ["RowKey"] }
+    });
+    for await (const entity of entities) {
         count++
     }
     res.status(200).json(JSON.parse(`{"count": "${count}"}`));
@@ -43,17 +32,16 @@ app.get('/store/count', async (_req, res) => {
 });
 
 app.get('/store', async (_req, res) => {
-    // Get a reference to a container
-    const containerClient = blobServiceClient.getContainerClient(CONTAINER_NAME);
-    // List the blob(s) in the container.
-    var store = [];
-    for await (const blob of containerClient.listBlobsFlat()) {
-        blockBlobClient = containerClient.getBlockBlobClient(blob.name);
-        const downloadBlockBlobResponse = await blockBlobClient.download();
-        const blobText = await streamToBuffer(downloadBlockBlobResponse.readableStreamBody);
-        store.push(JSON.parse(`{"id": "${blob.name}", "message": ${blobText}}`));
+    const partitionKey = "storeapp";
+    // Retrieve data and then iterate over results to count.
+    const entities = tableClient.listEntities({
+        queryOptions: { filter: odata`PartitionKey eq ${partitionKey}` }
+    });
+    var allEntities = [];
+    for await (const entity of entities) {
+        allEntities.push(JSON.parse(`{"id": "${entity.rowKey}", "message": ${entity.Value}}`));
     }
-    res.status(200).json(store);
+    res.status(200).json(allEntities);
     console.log(`List of items in the store requested by ${_req.ip}`);
 });
 
@@ -64,7 +52,6 @@ app.get('/store/:id', async (_req, res) => {
 });
 
 app.post('/store', async (req, res) => {
-    console.log(STATE_STORE_NAME);
     await client.state.save(STATE_STORE_NAME, [
         {
             key: randomUUID(),

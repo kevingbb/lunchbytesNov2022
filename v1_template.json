@@ -22,6 +22,9 @@
         },
         "ContainerApps.HttpApi.NewRevisionName": {
             "type": "String"
+        },
+        "ServiceBus.NamespaceName": {
+            "type": "String"
         }
     },
     "variables": {
@@ -45,17 +48,6 @@
                 "minimumTlsVersion": "TLS1_2",
                 "supportsHttpsTrafficOnly": true,
                 "accessTier": "Hot"
-            }
-        },
-        {
-            "type": "Microsoft.Storage/storageAccounts/queueServices/queues",
-            "apiVersion": "2021-01-01",
-            "name": "[concat(parameters('StorageAccount.Name'), '/default/', variables('StorageAccount.Queue.Name'))]",
-            "dependsOn": [
-                "[resourceId('Microsoft.Storage/storageAccounts', parameters('StorageAccount.Name'))]"
-            ],
-            "properties": {
-                "metadata": {}
             }
         },
         {
@@ -88,6 +80,34 @@
             }
         },
         {
+            "apiVersion": "2018-01-01-preview",
+            "name": "[parameters('ServiceBus.NamespaceName')]",
+            "type": "Microsoft.ServiceBus/namespaces",
+            "location": "[parameters('Location')]",
+            "sku": {
+              "name": "Standard"
+            },
+            "properties": {},
+            "resources": [{
+                "apiVersion": "2018-01-01-preview",
+                "name": "orders",
+                "type": "Topics",
+                "dependsOn": [
+                    "[resourceId('Microsoft.ServiceBus/namespaces', parameters('ServiceBus.NamespaceName'))]"
+                ],
+                "properties": {},
+                "resources": [{
+                    "apiVersion": "2018-01-01-preview",
+                    "name": "queuereader",
+                    "type": "Subscriptions",
+                    "dependsOn": [
+                        "orders"
+                    ],
+                    "properties": {}
+                }]
+            }]
+        },
+        {
             "type": "Microsoft.App/managedEnvironments",
             "apiVersion": "2022-03-01",
             "name": "[parameters('ContainerApps.Environment.Name')]",
@@ -104,9 +124,126 @@
                 },
                 "daprAIInstrumentationKey": "[reference(resourceId('Microsoft.Insights/components', parameters('AppInsights.Name')), '2020-02-02', 'Full').properties.InstrumentationKey]"
             },
+            "resources": [
+                {
+                    "type": "daprComponents",
+                    "name": "servicebus-pubsub",
+                    "apiVersion": "2022-03-01",
+                    "dependsOn": [
+                        "[resourceId('Microsoft.App/managedEnvironments', parameters('ContainerApps.Environment.Name'))]"
+                    ],
+                    "properties": {
+                        "componentType": "pubsub.azure.servicebus",
+                        "version": "v1",
+                        "metadata": [
+                            {
+                                "name": "connectionString",
+                                "value": "[listKeys(resourceId('Microsoft.ServiceBus/namespaces/authorizationRules', parameters('ServiceBus.NamespaceName'), 'RootManageSharedAccessKey'), '2017-04-01').primaryConnectionString]"
+                            }
+                        ],
+                        "scopes": [
+                            "httpapi",
+                            "queuereader"
+                        ]
+                    }
+                },
+                {
+                    "type": "daprComponents",
+                    "name": "azuretables-state",
+                    "apiVersion": "2022-03-01",
+                    "dependsOn": [
+                        "[resourceId('Microsoft.App/managedEnvironments', parameters('ContainerApps.Environment.Name'))]"
+                    ],
+                    "properties": {
+                        "componentType": "state.azure.tablestorage",
+                        "version": "v1",
+                        "metadata": [
+                            {
+                                "name": "accountName",
+                                "value": "[parameters('StorageAccount.Name')]"
+                            },
+                            {
+                                "name": "accountKey",
+                                "value": "[listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('StorageAccount.Name')), variables('StorageAccount.ApiVersion')).keys[0].value]"
+                            },
+                            {
+                                "name": "tableName",
+                                "value": "store"
+                            }
+                        ],
+                        "scopes": [
+                            "storeapp"
+                        ]
+                    }
+                }
+            ],
             "dependsOn": [
                 "[variables('Workspace.Resource.Id')]",
-                "[resourceId('Microsoft.Storage/storageAccounts', parameters('StorageAccount.Name'))]"
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('StorageAccount.Name'))]",
+                "[resourceId('Microsoft.ServiceBus/namespaces', parameters('ServiceBus.NamespaceName'))]"
+            ]
+        },
+        {
+            "name": "storeapp",
+            "type": "Microsoft.App/containerApps",
+            "apiVersion": "2022-03-01",
+            "kind": "containerapp",
+            "location": "[parameters('Location')]",
+            "properties": {
+                "managedEnvironmentId": "[variables('ContainerApps.Environment.Id')]",
+                "configuration": {
+                    "activeRevisionsMode": "single",
+                    "ingress": {
+                        "external": true,
+                        "targetPort": 3000
+                    },
+                    "secrets": [
+                        {
+                            "name": "storageconnectionstring",
+                            "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', parameters('StorageAccount.Name'), ';AccountKey=', listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('StorageAccount.Name')), variables('StorageAccount.ApiVersion')).keys[0].value, ';EndpointSuffix=core.windows.net')]"
+                        }
+                    ],
+                    "dapr": {
+                        "enabled": true,
+                        "appId": "storeapp",
+                        "appProcotol": "http",
+                        "appPort": 3000
+                    }
+                },
+                "template": {
+                    "containers": [
+                        {
+                            "image": "kevingbb/storeapp:v1.1",
+                            "name": "storeapp",
+                            "env": [
+                                {
+                                    "name": "TargetApp",
+                                    "value": "storeapp"
+                                },
+                                {
+                                    "name": "STATE_STORE_NAME",
+                                    "value": "azuretables-state "
+                                },
+                                {
+                                    "name": "STORAGE_CONNECTION_STRING",
+                                    "secretRef": "storageconnectionstring"
+                                },
+                                {
+                                    "name": "TABLE_NAME",
+                                    "value": "store"
+                                }
+                            ]
+                        }
+                    ],
+                    "scale": {
+                        "minReplicas": 1,
+                        "maxReplicas": 1,
+                        "rules": []
+                    }
+                }
+            },
+            "dependsOn": [
+                "[variables('ContainerApps.Environment.Id')]"
             ]
         },
         {
@@ -119,33 +256,36 @@
                 "managedEnvironmentId": "[variables('ContainerApps.Environment.Id')]",
                 "configuration": {
                     "activeRevisionsMode": "single",
+                    "ingress": {
+                        "external": false,
+                        "targetPort": 80
+                    },
                     "secrets": [
-                    {
-                        "name": "queueconnection",
-                        "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', parameters('StorageAccount.Name'), ';AccountKey=', listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('StorageAccount.Name')), variables('StorageAccount.ApiVersion')).keys[0].value, ';EndpointSuffix=core.windows.net')]"
-                    }],
+                        {
+                            "name": "sbconnection",
+                            "value": "[listKeys(resourceId('Microsoft.ServiceBus/namespaces/authorizationRules', parameters('ServiceBus.NamespaceName'), 'RootManageSharedAccessKey'), '2017-04-01').primaryConnectionString]"
+                        }
+                    ],
                     "dapr": {
                         "enabled": true,
-                        "appId": "queuereader"
+                        "appId": "queuereader",
+                        "appProcotol": "http",
+                        "appPort": 80
                     }
                 },
                 "template": {
                     "containers": [
                         {
-                            "image": "kevingbb/queuereader:v0.1",
+                            "image": "kevingbb/queuereader:v1.1",
                             "name": "queuereader",
                             "env": [
                                 {
-                                    "name": "QueueName",
-                                    "value": "demoqueue"
-                                },
-                                {
-                                    "name": "QueueConnectionString",
-                                    "secretref": "queueconnection"
-                                },
-                                {
                                     "name": "TargetApp",
                                     "value": "storeapp"
+                                },
+                                {
+                                    "name": "SBConnectionString",
+                                    "secretref": "sbconnection"
                                 }
                             ]
                         }
@@ -155,57 +295,23 @@
                         "maxReplicas": 2,
                         "rules": [
                             {
-                                "name": "myqueuerule",
-                                "azureQueue": {
-                                    "queueName": "demoqueue",
-                                    "queueLength": 10,
+                                "name": "sbscalerule",
+                                "custom": {
+                                    "type": "azure-servicebus",
+                                    "metadata": {
+                                        "topicName": "orders",
+                                        "subscriptionName": "queuereader",
+                                        "messageCount": "10"
+                                    },
                                     "auth": [
                                         {
-                                            "secretRef": "queueconnection",
+                                            "secretRef": "sbconnection",
                                             "triggerParameter": "connection"
                                         }
                                     ]
                                 }
                             }
                         ]
-                    }
-                }
-            },
-            "dependsOn": [
-                "[variables('ContainerApps.Environment.Id')]"
-            ]
-        },
-        {
-            "name": "storeapp",
-            "type": "Microsoft.App/containerApps",
-            "apiVersion": "2022-03-01",
-            "kind": "containerapp",
-            "location": "[parameters('Location')]",
-            "properties": {
-                "managedEnvironmentId": "[variables('ContainerApps.Environment.Id')]",
-                "configuration": {
-                    "ingress": {
-                        "external": true,
-                        "targetPort": 3000
-                    },
-                    "dapr": {
-                        "enabled": true,
-                        "appId": "storeapp",
-                        "appProcotol": "http",
-                        "appPort": 3000
-                    }
-                },
-                "template": {
-                    "containers": [
-                        {
-                            "image": "kevingbb/storeapp:v0.1",
-                            "name": "storeapp"
-                        }
-                    ],
-                    "scale": {
-                        "minReplicas": 1,
-                        "maxReplicas": 1,
-                        "rules": []
                     }
                 }
             },
@@ -227,31 +333,19 @@
                         "external": true,
                         "targetPort": 80
                     },
-                    "secrets": [
-                    {
-                        "name": "queueconnection",
-                        "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', parameters('StorageAccount.Name'), ';AccountKey=', listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('StorageAccount.Name')), variables('StorageAccount.ApiVersion')).keys[0].value, ';EndpointSuffix=core.windows.net')]"
-                    }],
                     "dapr": {
-                        "enabled": false
+                        "enabled": true,
+                        "appId": "httpapi",
+                        "appProcotol": "http",
+                        "appPort": 80
                     }
                 },
                 "template": {
                     "revisionSuffix": "[parameters('ContainerApps.HttpApi.NewRevisionName')]",
                     "containers": [
                         {
-                            "image": "kevingbb/httpapi:v0.1",
-                            "name": "httpapi",
-                            "env": [
-                                {
-                                    "name": "QueueName",
-                                    "value": "demoqueue"
-                                },
-                                {
-                                    "name": "QueueConnectionString",
-                                    "secretref": "queueconnection"
-                                }
-                            ]
+                            "image": "kevingbb/httpapi:v1.1",
+                            "name": "httpapi"
                         }
                     ],
                     "scale": {

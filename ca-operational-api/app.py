@@ -9,8 +9,8 @@ from flask_cors import CORS
 logging.basicConfig(level=logging.INFO)
 
 dapr_port = os.getenv("DAPR_HTTP_PORT") or 3603
-orders_url = "http://localhost:{}/v1.0/invoke/storeapp/method/store/count".format(dapr_port)
-queue_url = "http://localhost:{}/v1.0/invoke/httpapi/method/Data".format(dapr_port)
+orders_url = "http://localhost:{}/v1.0/invoke/storeapp/method/count".format(dapr_port)
+queue_url = "http://localhost:{}/v1.0/invoke/queuereader/method/count".format(dapr_port)
 
 app = flask.Flask(__name__)
 CORS(app)

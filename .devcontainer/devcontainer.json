@@ -21,7 +21,8 @@
 			"extensions": [
 				"ms-dotnettools.csharp",
 				"ms-azuretools.vscode-bicep",
-				"ms-azuretools.vscode-dapr"
+				"ms-azuretools.vscode-dapr",
+				"ms-azuretools.vscode-azurecontainerapps"
 			]
 		}
 	},

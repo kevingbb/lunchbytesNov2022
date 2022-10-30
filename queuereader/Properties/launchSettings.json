@@ -14,9 +14,7 @@
       "launchBrowser": true,
       "launchUrl": "swagger",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development",
-        "QueueConnectionString": "",
-        "QueueName": ""
+        "ASPNETCORE_ENVIRONMENT": "Development"
       }
     },
     "queuereader": {
@@ -27,8 +25,7 @@
       "applicationUrl": "http://localhost:8090",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "QueueConnectionString": "",
-        "QueueName": "",
+        "SBConnectionString": "",
         "DAPR_HTTP_PORT": "3601",
         "TARGET_APP" : "storeapp"
       }

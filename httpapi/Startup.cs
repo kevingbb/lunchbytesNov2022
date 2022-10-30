@@ -7,7 +7,6 @@ namespace HttpApi
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.Hosting;
     using Microsoft.OpenApi.Models;
-    using Azure.Messaging.ServiceBus;
 
     public class Startup
     {
@@ -23,7 +22,6 @@ namespace HttpApi
         {
 
             services.AddControllers();
-            services.AddSingleton(typeof(ServiceBusClient), this.getServiceBusClient());
             services.AddSwaggerGen(c =>
             {
                 c.SwaggerDoc("v1", new OpenApiInfo { Title = "HttpApi", Version = "v1" });
@@ -53,22 +51,6 @@ namespace HttpApi
                 endpoints.MapControllers();
                 endpoints.MapSubscribeHandler();
             });
-        }
-
-        /// <summary>
-        /// Creates a ServiceBusClient or throws ApplicationException if there are input errors.
-        /// </summary>
-        /// <returns></returns>
-        private ServiceBusClient getServiceBusClient()
-        {
-            string connectionString = this.Configuration["SBConnectionString"];
-
-            if (String.IsNullOrEmpty(connectionString))
-            {
-                throw new ArgumentNullException("'SBConnectionString' config value is required. Please add an environment variable or app setting.");
-            }
-
-            return new ServiceBusClient(connectionString);
         }
     }
 }

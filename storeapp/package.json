@@ -9,7 +9,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@azure/storage-blob": "^12.12.0",
+    "@azure/data-tables": "^13.2.0",
     "@dapr/dapr": "^2.4.2",
     "dotenv": "^16.0.3",
     "express": "^4.18.2"

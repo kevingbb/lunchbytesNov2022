@@ -89,7 +89,8 @@ az deployment group create \
     LogAnalytics.Workspace.Name=$logAnalytics \
     AppInsights.Name=$appInsights \
     StorageAccount.Name=$storageAccount \
-    Location=$location
+    Location=$location \
+    ServiceBus.NamespaceName=$servicebusNamespace
 ```
 
 Now the application is deployed, let's determine the URL we'll need to use to access it and store that in a variable for convenience
@@ -98,6 +99,8 @@ Now the application is deployed, let's determine the URL we'll need to use to ac
 # Get URLs
 storeURL=https://storeapp.$(az containerapp env show -g $resourceGroup -n $containerAppEnv --query 'properties.defaultDomain' -o tsv)/store
 echo $storeURL
+storeCountURL=https://storeapp.$(az containerapp env show -g $resourceGroup -n $containerAppEnv --query 'properties.defaultDomain' -o tsv)/count
+echo $storeCountURL
 apiURL=https://httpapi.$(az containerapp env show -g $resourceGroup -n $containerAppEnv --query 'properties.defaultDomain' -o tsv)/Data
 echo $apiURL
 ```
@@ -109,9 +112,9 @@ Let's see what happens if we call the URL of the store with curl.
 ```bash
 # Test Endpoints
 curl $storeURL && echo ""
-curl $apiURL && echo ""
+curl $storeCountURL && echo ""
 curl -X POST $apiURL?message=test
-curl $apiURL && echo ""
+curl $storeCountURL | jq .
 curl $storeURL | jq .
 ```
 
@@ -234,7 +237,8 @@ az deployment group create \
     LogAnalytics.Workspace.Name=$logAnalytics \
     AppInsights.Name=$appInsights \
     StorageAccount.Name=$storageAccount \
-    Location=$location
+    Location=$location \
+    ServiceBus.NamespaceName=$servicebusNamespace
 ```
 
 Let's check that the new version resolved the issue.
@@ -247,11 +251,11 @@ hey -m POST -n 25 -c 1 $apiURL?message=hello
 Now let's see what happens if we access that URL
 
 ``` bash
-# Check queuereader logs
-az monitor log-analytics query -w $workspaceId --analytics-query "ContainerAppConsoleLogs_CL | where ContainerAppName_s has 'queuereader' and ContainerName_s has 'queuereader' | where Log_s has 'Content' | project TimeGenerated, ContainerAppName_s, ContainerName_s, Log_s | order by TimeGenerated desc"
-
 # Check Store URL
 curl $storeURL | jq .
+
+# Check queuereader logs
+az monitor log-analytics query -w $workspaceId --analytics-query "ContainerAppConsoleLogs_CL | where ContainerAppName_s has 'queuereader' and ContainerName_s has 'queuereader' | where Log_s has 'Content' | project TimeGenerated, ContainerAppName_s, ContainerName_s, Log_s | order by TimeGenerated desc"
 ```
 
 ```json
@@ -286,7 +290,8 @@ az deployment group create \
     LogAnalytics.Workspace.Name=$logAnalytics \
     AppInsights.Name=$appInsights \
     StorageAccount.Name=$storageAccount \
-    Location=$location
+    Location=$location \
+    ServiceBus.NamespaceName=$servicebusNamespace
 ```
 
 First, let's look at the new Dashboard.
@@ -295,12 +300,15 @@ First, let's look at the new Dashboard.
 # Get Dashboard UI
 dashboardURL=https://dashboardapp.$(az containerapp env show -g $resourceGroup -n $containerAppEnv --query 'properties.defaultDomain' -o tsv)
 echo 'Open the URL in your browser of choice:' $dashboardURL
+# Get Dashboard API
+dashboardAPIURL=https://dashboardapi.$(az containerapp env show -g $resourceGroup -n $containerAppEnv --query 'properties.defaultDomain' -o tsv)
+echo $dashboardAPIURL
 
 # Check updated version of the solution (everything should be correct, no traffic splitting)
 hey -m POST -n 10 -c 1 $apiURL?message=testscale
 
 # Let's check the number of orders in the queue
-curl $apiURL && echo ""
+curl $dashboardAPIURL/queue && echo ""
 
 # Check Store URL
 curl $storeURL | jq . | grep testscale
@@ -310,12 +318,12 @@ Now let's see scaling in action. To do this, we will generate a large amount of 
 
 ```bash
 cd scripts
-./appwatch.sh $resourceGroup $apiURL
+./appwatch.sh $resourceGroup $apiURL $dashboardAPIURL/queue
 ```
 
 This will split your terminal into four separate views.
 
-* On the left, you will see the output from the `hey` command. It's going to send 10,000 requests to the application, so there will be a short delay, around 20 to 30 seconds, whilst the requests are sent. Once the `hey` command finishes, it should report its results.
+* On the left, you will see the output from the `hey` command. It's going to send 5,000 requests to the application, so there will be a short delay, around 20 to 30 seconds, whilst the requests are sent. Once the `hey` command finishes, it should report its results.
 * On the right at the top, you will see a list of the container app versions (revisions) that we've deployed. One of these will be the latest version that we just deployed. As `hey` sends more and more messages, you should notice that one of these revisions of the app starts to increase its replica count
 * Also on the right, in the middle, you should see the current count of messages in the queue. This will increase to 10,000 and then slowly decrease as the app works it way through the queue.
 
