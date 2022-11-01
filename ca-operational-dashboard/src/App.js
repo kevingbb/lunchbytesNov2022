@@ -6,13 +6,11 @@ export default function App() {
  
   useEffect(() => {
     const fetchScaleMetrics = async () => {
-      // const ordersResponse = await fetch(window.location.href.replace('dashboardapp','dashboardapi') + '/orders');
       const ordersResponse = await fetch('https://' + window._env_.REACT_APP_API + '.' + window._env_.CONTAINER_APP_ENV_DNS_SUFFIX + '/orders');
-      var jsonArray = await ordersResponse.json()
-      // const queueResponse = await fetch(window.location.href.replace('dashboardapp','dashboardapi') + '/queue');
+      var jsonResponse = await ordersResponse.json()
       const queueResponse = await fetch('https://' + window._env_.REACT_APP_API + '.' + window._env_.CONTAINER_APP_ENV_DNS_SUFFIX + '/queue');
       const countMessage = await queueResponse.text();
-      const data = [{"name": "Orders in Store","count": jsonArray.length},{"name": "Orders in Queue","count": countMessage.toString().replace(/[^\d.]/g, '')}]; 
+      const data = [{"name": "Orders in Store","count": jsonResponse.count},{"name": "Orders in Queue","count": countMessage.toString().replace(/[^\d.]/g, '')}]; 
       setScaleChartData({
         labels:  data.map((metric) => metric.name),
         datasets: [

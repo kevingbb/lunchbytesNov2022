@@ -213,7 +213,7 @@
                 "template": {
                     "containers": [
                         {
-                            "image": "kevingbb/storeapp:v1.1",
+                            "image": "kevingbb/storeapp:v1.2",
                             "name": "storeapp",
                             "env": [
                                 {
@@ -276,7 +276,7 @@
                 "template": {
                     "containers": [
                         {
-                            "image": "kevingbb/queuereader:v1.1",
+                            "image": "kevingbb/queuereader:v1.2",
                             "name": "queuereader",
                             "env": [
                                 {
@@ -291,8 +291,8 @@
                         }
                     ],
                     "scale": {
-                        "minReplicas": 1,
-                        "maxReplicas": 2,
+                        "minReplicas": 0,
+                        "maxReplicas": 5,
                         "rules": [
                             {
                                 "name": "sbscalerule",
@@ -331,7 +331,13 @@
                     "activeRevisionsMode": "multiple",
                     "ingress": {
                         "external": true,
-                        "targetPort": 80
+                        "targetPort": 80,
+                        "traffic":[
+                            {
+                                "latestRevision": true,
+                                "weight": 100
+                            }
+                        ]
                     },
                     "dapr": {
                         "enabled": true,
@@ -344,13 +350,13 @@
                     "revisionSuffix": "[parameters('ContainerApps.HttpApi.NewRevisionName')]",
                     "containers": [
                         {
-                            "image": "kevingbb/httpapi:v1.1",
+                            "image": "kevingbb/httpapi:v1.4",
                             "name": "httpapi"
                         }
                     ],
                     "scale": {
                         "minReplicas": 1,
-                        "maxReplicas": 2,
+                        "maxReplicas": 10,
                         "rules": [
                             {
                                 "name": "httpscalingrule",
@@ -361,6 +367,94 @@
                                 }
                             }
                         ]
+                    }
+                }
+            },
+            "dependsOn": [
+                "[variables('ContainerApps.Environment.Id')]"
+            ]
+        },
+        {
+            "name": "dashboardapi",
+            "type": "Microsoft.App/containerApps",
+            "apiVersion": "2022-03-01",
+            "kind": "containerapp",
+            "location": "[parameters('Location')]",
+            "properties": {
+                "managedEnvironmentId": "[variables('ContainerApps.Environment.Id')]",
+                "configuration": {
+                    "ingress": {
+                        "external": true,
+                        "targetPort": 5000
+                    },
+                    "dapr": {
+                        "enabled": true,
+                        "appId": "dashboardapi",
+                        "appProcotol": "http",
+                        "appPort": 5000
+                    }
+                },
+                "template": {
+                    "containers": [
+                        {
+                            "image": "kevingbb/ca-operational-api:v1.2",
+                            "name": "dashboardapi",
+                            "env": [
+                                {
+                                    "name": "TARGET_APP",
+                                    "value": "storeapp"
+                                }
+                            ]
+                        }
+                    ],
+                    "scale": {
+                        "minReplicas": 1,
+                        "maxReplicas": 1,
+                        "rules": []
+                    }
+                }
+            },
+            "dependsOn": [
+                "[variables('ContainerApps.Environment.Id')]"
+            ]
+        },
+        {
+            "name": "dashboardapp",
+            "type": "Microsoft.App/containerApps",
+            "apiVersion": "2022-03-01",
+            "kind": "containerapp",
+            "location": "[parameters('Location')]",
+            "properties": {
+                "managedEnvironmentId": "[variables('ContainerApps.Environment.Id')]",
+                "configuration": {
+                    "ingress": {
+                        "external": true,
+                        "targetPort": 80
+                    },
+                    "dapr": {
+                        "enabled": true,
+                        "appId": "dashboardapp",
+                        "appProcotol": "http",
+                        "appPort": 80
+                    }
+                },
+                "template": {
+                    "containers": [
+                        {
+                            "image": "kevingbb/ca-operational-dashboard:v1.2",
+                            "name": "dashboardapp",
+                            "env": [
+                                {
+                                    "name": "REACT_APP_API",
+                                    "value": "dashboardapi"
+                                }
+                            ]
+                        }
+                    ],
+                    "scale": {
+                        "minReplicas": 1,
+                        "maxReplicas": 1,
+                        "rules": []
                     }
                 }
             },

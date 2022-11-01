@@ -1,11 +1,13 @@
 namespace HttpApi.Controllers
 {
-    using Azure.Storage.Queues;
-    using Azure.Storage.Queues.Models;
     using Microsoft.AspNetCore.Mvc;
     using Microsoft.Extensions.Logging;
     using System;
     using System.Threading.Tasks;
+    using Dapr;
+    using Dapr.Client;
+    using System.Threading;
+    using System.Text.Json.Serialization;
 
     [ApiController]
     [Route("[controller]")]
@@ -13,39 +15,55 @@ namespace HttpApi.Controllers
     {
 
         private readonly ILogger<DataController> logger;
-        private readonly QueueClient queueClient;
+        private readonly DaprClient daprClient;
+        private readonly string PUBSUB_NAME = "servicebus-pubsub";
+        private readonly string TOPIC_NAME = "orders";
+        public record Message([property: JsonPropertyName("message")] string message);
 
-        public DataController(ILogger<DataController> logger, QueueClient queueClient)
+        public DataController(ILogger<DataController> logger, DaprClient daprClient)
         {
             this.logger = logger;
-            this.queueClient = queueClient;
+            this.daprClient = daprClient;
         }
-        [HttpGet]
-        public async Task<string> GetAsync()
-        {
-            QueueProperties properties = await this.queueClient.GetPropertiesAsync();
 
-            return $"Queue '{this.queueClient.Name}' has {properties.ApproximateMessagesCount} message{(properties.ApproximateMessagesCount != 1 ? "s" : "")}";
+        [HttpGet]
+        public ActionResult GetAsync()
+        {
+            logger.LogInformation($"Get message received.");
+            return Ok($"Get not implemented, only Post :).");
         }
 
         [HttpPost]
-        public async Task PostAsync()
+        public async Task<ActionResult> PostAsync()
         {
             try
             {
+                CancellationTokenSource source = new CancellationTokenSource();
+                CancellationToken cancellationToken = source.Token;
                 // TODO: Replace with Message from querystring.
-                await queueClient.SendMessageAsync(Guid.NewGuid().ToString());
+                var pubsubMessage = new Message (Guid.NewGuid().ToString());
+                //Using Dapr SDK to publish a topic
+                await daprClient.PublishEventAsync(PUBSUB_NAME, TOPIC_NAME, pubsubMessage , cancellationToken);
                 logger.LogInformation($"Message Contents: 'TODO: MISSING'");
-
-                Ok();
+                return Ok();
             }
-            catch (Azure.RequestFailedException rfe)
+            catch (Exception exc)
             {
-                logger.LogError($"Something went wrong connecting to the queue: {rfe}");
-
+                logger.LogError($"Something went wrong with pub/sub: {exc.Message}");
                 this.Response.StatusCode = 503;
                 this.Response.Headers.Add("Retry-After", "10");
+                return Problem("Something went wrong with pub/sub.");
             }
         }
+
+        // // For testing pubsub in a single application.
+        // // Subscribe to a topic 
+        // [Topic("servicebus-pubsub", "orders")]
+        // [HttpPost("message")]
+        // public ActionResult<string> getMessage(Message message)
+        // {
+        //     logger.LogInformation("Subscriber received : " + message);
+        //     return Ok(message);
+        // }
     }
 }

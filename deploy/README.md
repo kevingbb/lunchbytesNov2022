@@ -30,6 +30,7 @@ containerAppEnv=${name}-env
 logAnalytics=${name}-la
 appInsights=${name}-ai
 storageAccount=$(echo $name | tr -d -)sa
+servicebusNamespace=$(echo $name | tr -d -)sb
 ```
 
 Create the Resource Group where Azure Container Apps will be deployed.
@@ -51,10 +52,11 @@ az deployment group create \
     LogAnalytics.Workspace.Name=$logAnalytics \
     AppInsights.Name=$appInsights \
     StorageAccount.Name=$storageAccount \
-    Location=$location
+    Location=$location \
+    ServiceBus.NamespaceName=$servicebusNamespace
 ```
 
-### Bicep
+### Bicep (Under Construction)
 
 Setup some variables to be used for the deployment.
 
@@ -69,7 +71,6 @@ location=westeurope
 Create the Resource Group where Azure Container Apps will be deployed.
 
 ```bash
-
 # Create Resource Group
 az group create --name $resourceGroup --location $location -o table
 ```

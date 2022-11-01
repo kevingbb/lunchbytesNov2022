@@ -8,8 +8,8 @@
 			// Update 'VARIANT' to pick a .NET Core version: 3.1, 6.0
 			// Append -bullseye or -focal to pin to an OS version.
 			"VARIANT": "6.0",
-			// Options
-			"NODE_VERSION": "lts/*"
+			// [Choice] Node.js version: none, lts/*, 18, 16, 14
+			"NODE_VERSION": "16"
 		}
 	},
 
@@ -20,7 +20,9 @@
 			// Add the IDs of extensions you want installed when the container is created.
 			"extensions": [
 				"ms-dotnettools.csharp",
-				"ms-azuretools.vscode-bicep"
+				"ms-azuretools.vscode-bicep",
+				"ms-azuretools.vscode-dapr",
+				"ms-azuretools.vscode-azurecontainerapps"
 			]
 		}
 	},
@@ -52,7 +54,7 @@
 	//      "mounts": [ "source=${env:HOME}${env:USERPROFILE}/.aspnet/https,target=/home/vscode/.aspnet/https,type=bind" ],
 
 	// Use 'postCreateCommand' to run commands after the container is created.
-	// "postCreateCommand": "dotnet restore",
+	"postCreateCommand": "dapr init",
 
 	// Comment out to connect as root instead. More info: https://aka.ms/vscode-remote/containers/non-root.
 	"remoteUser": "vscode",
